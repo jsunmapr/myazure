@@ -163,7 +163,7 @@ function update_os_rpm() {
 
 		# Failure to install these components IS NOT critical
 	yum install -y bind-utils less lsof
-	yum install -y clustershell pdsh
+	yum install -y clustershell httpd
 	yum install -y sshpass
 
 		# Patch for CentOS 7.0; force mapr-* init scripts to 
