@@ -24,7 +24,7 @@
 murl_top=http://metadata/computeMetadata/v1
 murl_attr="${murl_top}/instance/attributes"
 
-#THIS_FQDN=$(curl -f $murl_top/instance/hostname)
+THIS_FQDN=$(curl -f $murl_top/instance/hostname)
 if [ -z "${THIS_FQDN}" ] ; then
 	THIS_HOST=${THIS_FQDN/.*/}
 else
@@ -34,24 +34,24 @@ fi
 # Definitions for our installation
 #	These should use the same meta-data definitions as the configure-* script
 #
-#curl -f $murl_attr &> /dev/null
-#if [ $? -eq 0 ] ; then
-#	MAPR_HOME=$(curl -f $murl_attr/maprhome)
-#	MAPR_UID=$(curl -f $murl_attr/mapruid)
-#	MAPR_USER=$(curl -f $murl_attr/mapruser)
-#	MAPR_GROUP=$(curl -f $murl_attr/maprgroup)
-#	MAPR_PASSWD=$(curl -f $murl_attr/maprpasswd)
-#
-#	MAPR_VERSION=$(curl -f $murl_attr/maprversion)
-#	MAPR_PACKAGES=$(curl -f $murl_attr/maprpackages)
-#fi
+curl -f $murl_attr &> /dev/null
+if [ $? -eq 0 ] ; then
+	MAPR_HOME=$(curl -f $murl_attr/maprhome)
+	MAPR_UID=$(curl -f $murl_attr/mapruid)
+	MAPR_USER=$(curl -f $murl_attr/mapruser)
+	MAPR_GROUP=$(curl -f $murl_attr/maprgroup)
+	MAPR_PASSWD=$(curl -f $murl_attr/maprpasswd)
+
+	MAPR_VERSION=$(curl -f $murl_attr/maprversion)
+	MAPR_PACKAGES=$(curl -f $murl_attr/maprpackages)
+fi
 
 MAPR_HOME=${MAPR_HOME:-"/opt/mapr"}
-MAPR_UID=${MAPR_UID:-"2000"}
+MAPR_UID=${MAPR_UID:-"5000"}
 MAPR_USER=${MAPR_USER:-"mapr"}
 MAPR_GROUP=${MAPR_GROUP:-"mapr"}
 MAPR_PASSWD=${MAPR_PASSWD:-"MapR"}
-MAPR_VERSION=${MAPR_VERSION:-"5.1.0"}
+MAPR_VERSION=${MAPR_VERSION:-"5.0.0"}
 
 MAPR_PACKAGES=${MAPR_PACKAGES:-"core,fileserver"}
 MAPR_PACKAGES=${MAPR_PACKAGES//:/,}
@@ -88,7 +88,7 @@ c() {
 #   NOTE: this target will change FREQUENTLY !!!
 #
 function add_epel_repo() {
-	#yum repolist enabled | grep -q ^epel
+	yum repolist enabled | grep -q ^epel
 	[ $? -eq 0 ] && return
 
     EPEL_RPM=/tmp/epel.rpm
@@ -114,7 +114,7 @@ function add_epel_repo() {
 			sed -i '0,/^enabled=0/s/enabled=0/enabled=1/' $epel_def
 		fi
 	else
-		#curl -L -f -o $EPEL_RPM http://download.fedoraproject.org/pub/$EPEL_LOC
+		curl -L -f -o $EPEL_RPM http://download.fedoraproject.org/pub/$EPEL_LOC
 		[ $? -eq 0 ] && rpm --quiet -i $EPEL_RPM
 	fi
 }
@@ -152,19 +152,19 @@ function do_yum_install() {
 }
 
 function update_os_rpm() {
-	#add_epel_repo
+	add_epel_repo
 
 	yum clean expire-cache
-	#do_yum_install nfs-utils iputils libsysfs nc
-	#do_yum_install ntp ntpdate
+	do_yum_install nfs-utils iputils libsysfs nc
+	do_yum_install ntp ntpdate
 
-	#do_yum_install syslinux sdparm
-	#do_yum_install sysstat
+	do_yum_install syslinux sdparm
+	do_yum_install sysstat
 
 		# Failure to install these components IS NOT critical
-	#yum install -y bind-utils less lsof
-	#yum install -y clustershell pdsh
-	#yum install -y sshpass
+	yum install -y bind-utils less lsof
+	yum install -y clustershell pdsh
+	yum install -y sshpass
 
 		# Patch for CentOS 7.0; force mapr-* init scripts to 
 		# avoid use of systemctl (needed for MapR 4.1.0 and 5.0.0)
@@ -203,10 +203,10 @@ function update_ntp_config() {
 
 		# TBD: copy in /usr/share/zoneinfo file based on 
 		# zone in which the instance is deployed
-	#zoneInfo=$(curl -f ${murl_top}/zone)
-	#curZone=`basename "${zoneInfo}"`
-	#curTZ=`date +"%Z"`
-	#echo "    Instance zone is $curZone; TZ setting is $curTZ" >> $LOG
+	zoneInfo=$(curl -f ${murl_top}/zone)
+	curZone=`basename "${zoneInfo}"`
+	curTZ=`date +"%Z"`
+	echo "    Instance zone is $curZone; TZ setting is $curTZ" >> $LOG
 
 		# Update the timezones we're sure of.
 	TZ_HOME=/usr/share/zoneinfo/posix
@@ -355,7 +355,7 @@ function install_oraclejdk_rpm() {
 #	JDK_RPM="http://download.oracle.com/otn-pub/java/jdk/7u75-b13/jdk-7u75-linux-x64.rpm"
 	JDK_RPM="http://download.oracle.com/otn-pub/java/jdk/8u51-b16/jdk-8u51-linux-x64.rpm"
 
-	#$(cd /tmp; curl -f -L -C - -b "oraclelicense=accept-securebackup-cookie" -O $JDK_RPM)
+	$(cd /tmp; curl -f -L -C - -b "oraclelicense=accept-securebackup-cookie" -O $JDK_RPM)
 
 	RPM_FILE=/tmp/`basename $JDK_RPM`
 	if [ ! -s $RPM_FILE ] ; then
@@ -379,7 +379,7 @@ function install_oraclejdk_rpm() {
 function install_openjdk_rpm() {
     echo "Installing OpenJDK packages (for rpm distros)" >> $LOG
 
-	#yum install -y java-1.7.0-openjdk java-1.7.0-openjdk-devel 
+	yum install -y java-1.7.0-openjdk java-1.7.0-openjdk-devel 
 #	yum install -y java-1.7.0-openjdk-javadoc
 
 	jcmd=`readlink -f /usr/bin/java`
@@ -479,7 +479,7 @@ function add_mapr_user() {
 			# now is the time to make sure it lines up
 			# with the pre-existing account.
 			#	NOTE: we ONLY do this if a UID was passed in
-		#target_uid=$(curl -f $murl_attr/mapruid)
+		target_uid=$(curl -f $murl_attr/mapruid)
 		if [ -n "${target_uid}" -a  `id -u $MAPR_USER` -ne "${target_uid:-0}" ] ; then
 			echo "updating ${MAPR_USER} account to uid ${MAPR_UID}" >> $LOG
 			usermod -u ${target_uid} ${MAPR_USER}
@@ -714,7 +714,7 @@ main() {
 	install_java
 
 	add_mapr_user
-	#setup_mapr_repo
+	setup_mapr_repo
 #	install_mapr_packages
 #	disable_mapr_services
 
