@@ -20,7 +20,7 @@
 #	$0 [ <basename> ] [ <size> ] [ <edition> ] [ <mapr_version> ] \
 #	  [ <mapr_password> ] [ <auth_type> ] [ <admin_uer> ] [ <admin_password> ]
 #
-#		<edition> defaults to M3
+#		<edition> defaults to convergedCommunity
 #		<mapr_version> defaults to 5.0.0
 #		<mapr_password> defaults to MapRAZ
 #
@@ -44,8 +44,11 @@ BINDIR=`dirname $THIS`
 
 # These admin user settings must match the template
 #	(or be passed in)
-SUDO_USER=${7:-azadmin}
+EDITION=${3:-convergedCommunity}
+SUDO_USER=${7:-mapradmin}
 SUDO_PASSWD=${8:-MapRAzur3}
+
+echo $EDITION > /tmp/maprlicensetype
 
 # We need to set the password, because it is *not* set in the case where
 # we use PKI. We are going to later turn it off
@@ -55,12 +58,43 @@ HOSTNAME=`hostname`
 CLUSTER_HOSTNAME_BASE="${HOSTNAME%node*}node"
 CLUSTER_NAME="${HOSTNAME%node*}"
 
+systemctl stop mapr-warden
+systemctl disable mapr-warden
+MAPR_HOME=/opt/mapr
+rm -rf $MAPR_HOME/hostid
+HOSTID=$($MAPR_HOME/server/mruuidgen)
+echo $HOSTID > $MAPR_HOME/hostid
+echo $HOSTID > $MAPR_HOME/conf/hostid.$$
+chmod 444 $MAPR_HOME/hostid
+
+THIS_FQDN=`hostname -f`
+THIS_HOST=${THIS_FQDN%%.*}
+HOSTNAME_FILE="$MAPR_HOME/hostname"
+   if [ ! -f $HOSTNAME_FILE ]; then
+           if [ -n "$THIS_FQDN" ] ; then
+                   echo "$THIS_FQDN" > $HOSTNAME_FILE
+           elif [ -n "$THIS_HOST" ] ; then
+                   echo "$THIS_HOST" > $HOSTNAME_FILE
+           else
+                   my_fqdn=`/bin/hostname --fqdn`
+                   [ -n "$my_fqdn" ] && echo "$my_fqdn" > $HOSTNAME_FILE
+           fi
+
+           if [ -f $HOSTNAME_FILE ] ; then
+                   chown $MAPR_USER:$MAPR_GROUP $HOSTNAME_FILE
+           else
+                   echo "Cannot find valid hostname. Please check your DNS settings" >> $LOG
+           fi
+   fi
+
+
+
 sh $BINDIR/prepare-disks.sh
 
 # These should be passed in via metadata
 export MAPR_PASSWD=${5:-MapRAZ}
 export AUTH_METHOD=${6:-password}
-export MAPR_VERSION=${4:-5.0.0} 
+export MAPR_VERSION=${4:-5.1.0} 
 sh $BINDIR/prepare-node.sh
 
 sh $BINDIR/gen-cluster-hosts.sh ${1:-$CLUSTER_HOSTNAME_BASE} ${2:-}
@@ -72,15 +106,15 @@ sh $BINDIR/gen-create-lock.sh $SUDO_USER
 # At this point, we only need to configure the installer service
 # and launch the process on the one node ... the first one in the cluster
 
-# Simple test ... are we node 0 ?
+# Simple test ... exit if we are not node0...
 [ "$HOSTNAME" != "${CLUSTER_HOSTNAME_BASE}0" ] && perl $BINDIR/copy_keys.pl ${CLUSTER_HOSTNAME_BASE}0 && exit 0
 
+#Below this line is for node0 only
+#enable mysql
+systemctl enable mysqld
+systemctl start mysqld
 export MAPR_CLUSTER=AZtest
 [ -f /tmp/mkclustername ] && MAPR_CLUSTER=`cat /tmp/mkclustername` 
-
-#chmod a+x $BINDIR/deploy-installer.sh
-#$BINDIR/deploy-installer.sh
-#[ $? -ne 0 ] && exit 1
 
 
 # Make sure the hostnames in our cluster resolve.   There
@@ -128,11 +162,11 @@ done
 #
 sh $BINDIR/gendist-sshkey.sh $SUDO_USER $SUDO_PASSWD id_rsa
 sh $BINDIR/gendist-sshkey.sh mapr $MAPR_PASSWD id_launch
+
 ssh-keygen -t rsa -P '' -f ~/.ssh/id_rsa
 cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
 chmod 600 ~/.ssh/authorized_keys
 cat ~mapr/.ssh/id_launch.pub >> ~/.ssh/authorized_keys
-
 
 # Now make sure that all the nodes have successfully 
 # completed the "prepare" step.  The evidence of that is
@@ -147,12 +181,13 @@ SSHPASS_OPTS="-o PasswordAuthentication=yes   -o StrictHostKeyChecking=no -o Use
 nnodes=`wc -l $CF_HOSTS_FILE | awk '{print $1}'`
 
 perl $BINDIR/copy_keys.pl ${CLUSTER_HOSTNAME_BASE}0 $SUDO_USER
+
 perl $BINDIR/mapr_inst.pl root $MAPR_PASSWD $SUDO_USER $CLUSTER_NAME
 
 # Post-install operations on successful deployment
 # enable SUDO_USER to access the cluster
 [ ${SUDO_USER} != "root" ] && \
-	su $MAPR_USER -c "maprcli acl edit -type cluster -user $SUDO_USER:login"
+	su $MAPR_USER -c "maprcli acl edit -type cluster -user $SUDO_USER:login,fc,ss,cv,a"
 
 # Restart NFS (in case we installed trial license)
 maprcli license apps -noheader | grep -q -w NFS

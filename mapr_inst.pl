@@ -16,12 +16,12 @@ $nbase=$1 . "node";
 system("sed -i \"s/^all:.*/all:$nbase\[0-$#tmp]/g\" $clushf");
 
 switch($nnodes){
-case 1 {@zk=qw(0);@cldb=qw(0);@rm=qw(0);@hs=qw(0);@web=qw(0);}
-case 2 {@zk=qw(0);@cldb=qw(0);@rm=qw(0);@hs=qw(0);@web=qw(0);}
-case 3 {@zk=qw(0 1 2);@cldb=qw(0 1);@rm=qw(0 1);@hs=qw(2);@web=qw(0);}
-case 4 {@zk=qw(0 1 2);@cldb=qw(0 1);@rm=qw(0 1);@hs=qw(2);@web=qw(0);}
-case 5 {@zk=qw(0 1 2);@cldb=qw(0 1);@rm=qw(0 1);@hs=qw(2);@web=qw(0);}
-else {@zk=qw(0 1 2);@cldb=qw(3 4 5);@rm=qw(4 5);@hs=qw(4);@web=qw(0 1);}
+case 1 {@zk=qw(0);@cldb=qw(0);@rm=qw(0);@hs=qw(0);@web=qw(0);@sparkhist=qw(0);}
+case 2 {@zk=qw(0);@cldb=qw(0);@rm=qw(0);@hs=qw(0);@web=qw(0);@sparkhist=qw(0);}
+case 3 {@zk=qw(0 1 2);@cldb=qw(0 1);@rm=qw(0 1);@hs=qw(2);@web=qw(0);@sparkhist=qw(2);}
+case 4 {@zk=qw(0 1 2);@cldb=qw(0 1);@rm=qw(0 1);@hs=qw(2);@web=qw(0);@sparkhist=qw(2);}
+case 5 {@zk=qw(0 1 2);@cldb=qw(0 1);@rm=qw(0 1);@hs=qw(2);@web=qw(0);@sparkhist=qw(2);}
+else {@zk=qw(0 1 2);@cldb=qw(3 4 5);@rm=qw(4 5);@hs=qw(4);@web=qw(0 1);@sparkhist=qw(2);}
 }
 
 $zk="zk:";
@@ -54,10 +54,17 @@ $web= $web . $nbase . $h . ",";
 }
 chop $web;
 
+$sparkhist="sparkhist:";
+foreach $h (@sparkhist){
+$sparkhist= $sparkhist . $nbase . $h . ",";
+}
+chop $sparkhist;
+
 open(FILE,">>$clushf");
-print FILE "$cldb\n$zk\n$rm\n$hs\n$web\n";
+print FILE "$cldb\n$zk\n$rm\n$hs\n$web\n$sparkhist";
 close(FILE);
 
+$javav=`rpm -qa |  grep openjdk | head -1 | awk -F\- '{print \$1"-"\$2"-"\$3}'`; chomp $javav;
 
 $inst_script="
 clush -g zk yum install mapr-zookeeper -y
@@ -71,14 +78,14 @@ clush -a /opt/mapr/server/configure.sh -C `nodeset -S, -e \@cldb` -Z `nodeset -S
 
 clush -a /opt/mapr/server/disksetup -F /tmp/MapR.disks
 
-clush -a \"sed -i 's/#export JAVA_HOME=/export JAVA_HOME=\\/usr\\/java\\/latest/g' /opt/mapr/conf/env.sh\"
+clush -a \"sed -i 's/#export JAVA_HOME=/export JAVA_HOME=\\/usr\\/lib\\/jvm\\/$javav/g' /opt/mapr/conf/env.sh\"
 
 clush -a mkdir -p /mapr
 echo \"localhost:/mapr  /mapr  hard,nolock\" > /opt/mapr/conf/mapr_fstab
 clush -ac /opt/mapr/conf/mapr_fstab --dest /opt/mapr/conf/mapr_fstab
 
-clush -a /etc/init.d/mapr-zookeeper start
-clush -a /etc/init.d/mapr-warden start
+clush -a systemctl start mapr-zookeeper 
+clush -a systemctl start mapr-warden 
 ";
 
 open(INST,">/tmp/mapr_install.sh");
@@ -107,6 +114,7 @@ if ($mtime >=100){print "Cluster failed to install\n";exit 1;}
 
 }until($checkfs==1 & $checkmcs==1);
 print "Cluster is ready...\n";
+
 } #core
 
 sub hiveserver_inst{
@@ -115,9 +123,46 @@ $headnode=`head -1 /tmp/maprhosts | awk '{print $1}'`;chomp $headnode;
 $mysql_user=$_[0];
 $mysql_passwd=$_[1];
 $sudo_user=$_[2];
-system("yum -y install mysql-server mapr-hivemetastore");
-system("chkconfig mysqld on; service mysqld start");
-system("mysqladmin -u $mysql_user password $mysql_passwd");
+#system("yum -y install mysql-community-server mapr-hivemetastore");
+system("yum -y install mapr-hivemetastore");
+
+$passwd=$mysql_passwd;
+
+#system("systemctl stop mysqld; systemctl disable mysqld");
+#system("yum -y erase mysql-community-*");
+#system("rm -rf /var/log/mysqld.log /var/lib/mysql");
+
+#system("yum -y install mysql-community-server");
+system("systemctl enable mysqld; systemctl start mysqld");
+$tmp=`grep "temporary password" /var/log/mysqld.log`; chomp $tmp;
+@tmp=split(/:/,$tmp);
+$dpasswd=$tmp[-1];
+$dpasswd=~s/ +//g;
+
+$f="
+spawn mysql -u root -p
+expect \"Enter password: \"
+
+send \"$dpasswd\\r\"
+expect \"mysql> \"
+
+send \"SET GLOBAL default_password_lifetime=0;SET GLOBAL validate_password_policy=LOW;SET GLOBAL validate_password_length=6;set global validate_password_mixed_case_count=0;set global validate_password_special_char_count=0;\\r\"
+expect \"mysql> \"
+
+send \"alter user 'root'\@'localhost' identified by '$passwd';\\r\"
+expect \"mysql> \"
+
+send \"quit;\\r\"
+expect eof
+exit
+";
+
+open(EFILE,">/tmp/f.exp");
+print EFILE $f;
+close(EFILE);
+
+system("expect /tmp/f.exp");
+system("rm -fr /tmp/f.exp");
 
 $hive_srv_config=
 "<property><name>javax.jdo.option.ConnectionURL<\\/name><value>jdbc:mysql:\\/\\/localhost:3306\\/hive?createDatabaseIfNotExist=true<\\/value><\\/property>\\n<property><name>javax.jdo.option.ConnectionDriverName<\\/name><value>com.mysql.jdbc.Driver<\\/value><\\/property>\\n<property><name>javax.jdo.option.ConnectionUserName<\\/name><value>$mysql_user<\\/value><\\/property>\\n<property><name>javax.jdo.option.ConnectionPassword<\\/name><value>$mysql_passwd<\\/value><\\/property>\\n<property><name>hive.metastore.warehouse.dir<\\/name><value>\\/user\\/hive\\/warehouse<\\/value><\\/property>\\n<property><name>hive.metastore.uris<\\/name><value>thrift:\\/\\/localhost:9083<\\/value><\\/property>\\n<property><name>datanucleus.autoCreateSchema<\\/name><value>true<\\/value><\\/property>\\n<property><name>datanucleus.autoCreateTables<\\/name><value>true<\\/value><\\/property>\\n<\\/configuration>";
@@ -153,15 +198,26 @@ system("hadoop fs -chmod -R 777 /user/hive");
 #install drill
 print "Installing Drill..\n";
 system("clush -a yum -y install mapr-drill");
+system("clush -a \"sed -i 's/^DRILL_MAX_DIRECT_MEMORY.*/DRILL_MAX_DIRECT_MEMORY=3G/g' `find /opt/mapr/drill -name drill-env.sh`\"");
+system("clush -a \"sed -i 's/^DRILL_HEAP=.*/DRILL_HEAP=2G/g' `find /opt/mapr/drill -name drill-env.sh`\"");
 
+#install spark
+print "Installing Spark..\n";
+system("clush -a yum -y install mapr-spark");
+system("clush -g sparkhist yum -y install mapr-spark-historyserver");
+system("hadoop fs -mkdir /apps/spark; hadoop fs -chmod 777 /apps/spark");
 } #hiveserver
 
 sub post_inst{
 #system("clush -a \"sed -i 's/#PermitRootLogin.*/PermitRootLogin no/g' /etc/ssh/sshd_config\"");
 #system("clush -a service sshd restart");
-#$lca=`find /var/lib/waagent -name lca`; chomp $lca;
-#system("chmod u+x $lca;$lca");
 system("rm -rf /tmp/mapr_install.sh");
+$lic=`cat /tmp/maprlicensetype`;chomp $lic;
+if ($lic eq "convergedCommunity") {$licf="~mapr/azureCC.txt";}
+if ($lic eq "convergedEnterprise") {$licf="~mapr/azureCE_200.txt";}
+if ($lic eq "Enterprise") {$licf="~mapr/azureE_200.txt";}
+system("maprcli license add -license $licf -is_file true");
+system("rm -rf ~mapr/*.txt");
 print "Cluster is ready.\n";
 } #post_inst
 
@@ -171,4 +227,4 @@ print "Installing MapR Core...\n";
 &core_inst(($ARGV[$#ARGV]));
 print "Installing Hive metastore and Hive server ...\n";
 &hiveserver_inst(@ARGV);
-&post_inst();
+&post_inst(@ARGV);

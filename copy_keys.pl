@@ -5,7 +5,6 @@ $success=1;
 
 if ($myname eq $ARGV[0]){
  print "this is the first node\n";
- system("yum -y install httpd");
  system("mkdir -p /root/.ssh");
  system("cp ~$ARGV[1]/.ssh/authorized_keys /root/.ssh");
  system("rm -f /root/.ssh/id_rsa.pub");
@@ -13,7 +12,7 @@ if ($myname eq $ARGV[0]){
  system("cp ~$ARGV[1]/.ssh/config /root/.ssh");
  system("cp ~$ARGV[1]/.ssh/authorized_keys /var/www/html/key");
  system("chmod 755 /var/www/html/key");
- system("service httpd restart");
+ system("systemctl start httpd");
 
 $nlist=`awk '{print $1}' /tmp/maprhosts`;chomp $nlist;
 @nlist=split(/\n/,$nlist);

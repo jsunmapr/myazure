@@ -24,22 +24,23 @@
             }
         },
         "clusterEdition": {
-            "defaultValue": "M3",
+            "defaultValue": "convergedCommunity",
             "type": "string",
-            "allowedValues": ["M3", "M5", "M7"],
+            "allowedValues": ["convergedCommunity", "Enterprise", "convergedEnterprise"],
             "metadata": {
-                 "description": "MapR License Edition {Community (M3), Enterprise (M5), or Enterprise Database (M7)}"
+                 "description": "MapR License Edition {Community Community, Enterprise, or Converged Enterprise}"
             }
         },
         "maprVersion": {
             "defaultValue": "5.1.0",
             "type": "string",
-            "allowedValues": ["4.1.0", "5.0.0", "5.1.0" ],
+            "allowedValues": ["5.1.0"],
             "metadata": {
                  "description": "MapR Software Version"
             }
         },
         "adminUsername": {
+            "defaultValue": "mapradmin",
             "type": "securestring",
             "metadata": {
                  "description": "System Administrator for deployed nodes"

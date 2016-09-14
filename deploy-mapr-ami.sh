@@ -180,7 +180,7 @@ function generate_mapr_param_file() {
 		# Find the cluster file most closely matching our 
 		# target size and license type
 	fidx=${CLUSTER_SIZE:-1}
-	if [ $fidx -ge 3  -a "${LIC_TYPE:-M3}" = "M3" ] ; then
+	if [ $fidx -ge 3  -a "${LIC_TYPE:-convergedCommunity}" = "convergedCommunity" ] ; then
 		cfg_file=$CFG_DIR/M3.lst
 	else
 		while [ $fidx -gt 0 ] ; do

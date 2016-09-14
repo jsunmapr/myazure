@@ -60,7 +60,7 @@ if [ -n "${SUDO}" ] ; then
 	$SUDO -c "cat << sscEOF >> ${USER_DIR}/.ssh/config 
 StrictHostKeyChecking no
 
-IdentityFile  ~/${KEYFILE} 
+#IdentityFile  ~/${KEYFILE} 
 sscEOF"
 	$SUDO -c "chmod 600 ${USER_DIR}/.ssh/config"
 else
@@ -81,7 +81,7 @@ for h in `awk '{print $1}' $CF_HOSTS_FILE` ; do
 #		Can't use ssh-copy-id through the SUDO and sshpass wrappers.
 #		Seed the authorized_keys file on the remote system "by hand"
 #	$SUDO -c "SSHPASS=$PASSWD sshpass -e /usr/bin/ssh-copy-id $MY_SSH_OPTS ${USER}@${h}"
-	SSHPASS=$PASSWD sshpass -e ssh $MY_SSH_OPTS ${USER}@${h} mkdir .ssh
+	SSHPASS=$PASSWD sshpass -e ssh $MY_SSH_OPTS ${USER}@${h} mkdir -p .ssh
 	SSHPASS=$PASSWD sshpass -e ssh $MY_SSH_OPTS ${USER}@${h} "echo \"$SSH_KEY\" >> .ssh/authorized_keys"
 	SSHPASS=$PASSWD sshpass -e ssh $MY_SSH_OPTS ${USER}@${h} "chmod go-rwx .ssh .ssh/authorized_keys"
 	scp -i ${USER_DIR}/${KEYFILE} ${USER_DIR}/${KEYFILE}* ${USER}@${h}:.ssh
